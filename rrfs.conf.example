@@ -1,0 +1,119 @@
+# rrfs.conf -- tunables for the anomaly engine and canary coordinator.
+# Copy this next to your backing directory (or point rrfs_fuse at it
+# with --config) and edit without recompiling.
+
+# --- Anomaly Engine weights -------------------------------------------------
+w_entropy = 1.0
+w_overwrite_burst = 2.0
+w_ext_churn = 3.0
+
+# Entropy (bits/byte, 0-8) above which a write is considered "high".
+entropy_high_water = 7.5
+
+# Distinct files touched by one process within `window_seconds` before
+# it counts as a burst.
+burst_file_threshold = 6
+window_seconds = 5
+
+# Composite score at which a checkpoint is auto-promoted and (if
+# enabled below) the offending process is suspended.
+promote_threshold = 10.0
+
+# Score decay per second of inactivity (lets a process "cool down"
+# instead of accumulating score forever).
+decay_per_second = 0.5
+
+# --- Canary Snapshot Coordinator --------------------------------------------
+# Number of un-promoted COW generations kept before the oldest is
+# pruned. Promoted checkpoints are kept regardless of this value.
+ring_size = 8
+
+# --- Active containment ------------------------------------------------------
+# If true, rrfs sends SIGSTOP to the writing process the moment its
+# score crosses promote_threshold, freezing it in place rather than
+# just recovering data after the fact. The process stays stopped until
+# an operator runs `rrfs_ctl <mount> resume <pid>`.
+suspend_on_detect = true
+
+# --- Rate limiting & scheduled baselines ----------------
+# Minimum milliseconds between any two promoted checkpoints (manual,
+# scheduled, or automatic). Protects against a flood of PROMOTE
+# commands through the control channel creating many full-tree copies
+# back to back. 0 disables the limit.
+promote_min_interval_ms = 2000
+
+# How often (seconds) to automatically take a "scheduled" baseline
+# checkpoint if anything has been written since the last one. This
+# narrows the window in which the only checkpoint predating an attack
+# is one an operator remembered to take manually. 0 disables it.
+baseline_interval_seconds = 60
+
+# Keep at most this many *scheduled* baseline checkpoints (oldest pruned
+# first). Manual and auto (detection) checkpoints are never pruned.
+# 0 = unlimited. Each checkpoint is a full copy of the tree.
+max_scheduled_checkpoints = 5
+
+# --- Hold-back overlay, scoped repair, content-delta & aggregation ---
+# Destructive writes (overwrite/truncate of an existing file) go to a pending copy;
+# the backing store keeps the original until the write is committed.
+holdback_enabled = true
+holdback_commit_delay_ms = 2000      # quiet time before a held write is committed
+holdback_max_file_mb = 64            # larger files are written in place (copy-on-write only)
+holdback_max_files = 256             # force-commit the oldest beyond this many held files
+holdback_commit_score_frac = 0.5     # owner score must stay below frac * promote_threshold
+# On detection: undo the offender's journaled changes from the copy-on-write ring
+# (attacker-created files are quarantined under .rrfs_state/quarantine/, never deleted).
+repair_on_detect = true
+# Compare each destructive write with the preserved original bytes (signature / text / entropy delta).
+content_delta_enabled = true
+w_type_destroyed = 3.0
+entropy_jump_min = 1.0
+# Rate-independent signal: this many distinct corroborated files within slow_window_seconds.
+slow_burn_files = 8
+slow_window_seconds = 300
+# Also score the parent process (catches one-process-per-file loops).
+aggregate_by_parent = true
+
+# --- Ambiguous bulk overwrites: noise replacing noise, no content evidence ---
+# off    : ignore;  defer : keep the owner's held writes uncommitted for ambiguous_defer_ms
+#          after the last ambiguous overwrite once ambiguous_files distinct files were hit
+#          (operator may `rrfs_ctl <mnt> discard <pid>`);  freeze : treat as a detection.
+ambiguous_policy = defer
+ambiguous_files = 8
+ambiguous_defer_ms = 30000
+
+# ---- Reliability (false-positive containment) ----
+# Soft/hard tiers: a threshold crossing with no content evidence (renames/extensions only) is a SOFT
+# detection (logged, nobody stopped). A HARD detection needs content evidence on this many distinct files.
+graded_response = true
+hard_min_content_files = 2
+# On a hard detection keep the owner's held writes (hidden from readers) so `rrfs_ctl <mnt> release <pid>`
+# can commit them if it was a false positive. false = discard them immediately.
+shelve_on_detect = true
+# JPEG->PNG style conversions between two known formats are not "type destroyed".
+type_conversion_benign = true
+# Cooperation-aware / cumulative hold tier (hold-only, never freezes): content-evidence files are also summed per
+# executable (>= cluster_min_files files from >= cluster_min_pids processes) and globally (>= global_min_files);
+# a triggered cluster's held writes are not committed until cluster_defer_ms after the last evidence.
+cluster_hold = true
+cluster_defer_ms = 30000
+cluster_min_files = 8
+cluster_min_pids = 3
+global_min_files = 16
+# E: soft alert when one process deletes this many pre-existing files in the slow window (alert only; 0 = off)
+bulk_delete_alert_files = 16
+# While a cluster hold is active its members may not rename over or delete pre-existing files (EACCES; nobody is stopped).
+cluster_block = false   # off by default: no measured benefit (attackers finish before the cluster triggers)
+
+# Alerts, checkpoints and logging
+soft_hold = true            # after a soft alert, withhold that process's held writes
+soft_hold_ms = 30000
+soft_checkpoint = true      # a soft alert also takes a checkpoint (rebuilt from the original-byte ring)
+
+# Opt-in strict mode (read provenance)
+read_provenance = false        # a process that READ a file and then overwrites it with high-entropy data over high-entropy originals is treated as destroying it
+provenance_window_ms = 120000  # how long a read counts
+provenance_min_hamming = 0.35  # new bytes must differ from old in at least this fraction of bits (a small edit is not a transform)
+
+# Opt-in: create hold-back pending copies with FICLONE/copy_file_range (no measured benefit on ext4; untested on reflink filesystems)
+holdback_fast_copy = false

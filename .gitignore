@@ -1,0 +1,9 @@
+build/
+*.o
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+cmake-build-*/
+*.ok
+compile_commands.json
