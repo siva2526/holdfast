@@ -1,0 +1,4 @@
+seconds (median of 3): new-64MB | overwrite-32MB-in-place | create-1000-files | overwrite-1000-small-files
+direct        : .022 .099 .138 .079
+rrfs no-hold  : .307 .283 .302 .222
+rrfs hold-back: .308 .321 .341 .801

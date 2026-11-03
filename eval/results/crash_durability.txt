@@ -1,0 +1,6 @@
+## attack, daemon crash mid-attack
+  with_holdback: attacker killed-daemon mid-attack -> originals intact in BACKING: 12/12
+  no_holdback: attacker killed-daemon mid-attack -> originals intact in BACKING: 12/12
+## benign edit, daemon crash within the commit window
+  with_holdback: benign edit acknowledged, daemon killed 0.5 s later -> on disk: 'version 1'
+  no_holdback: benign edit acknowledged, daemon killed 0.5 s later -> on disk: 'version 2 (user edit)'

@@ -1,0 +1,18 @@
+{
+ "A": {
+  "detected": true,
+  "live_intact_after_detect": 20,
+  "of": 20,
+  "live_changed_after_release": 7,
+  "restored_versions_kept_in_undo": 7,
+  "ctl": "released pid 26959: 0 shelved writes committed, 8 repaired paths put back"
+ },
+ "B": {
+  "detected": true,
+  "manifest_written": true,
+  "store_intact_after_crash": 20,
+  "of": 20,
+  "files_committed_by_release_after_restart": 3,
+  "ctl": "released pid 26969: 3 shelved writes committed, 0 repaired paths put back"
+ }
+}
